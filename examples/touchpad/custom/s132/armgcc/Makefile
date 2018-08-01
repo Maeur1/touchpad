@@ -159,6 +159,11 @@ flash: $(OUTPUT_DIRECTORY)/nrf52832_xxaa.hex
 	Robocopy ".\\$(OUTPUT_DIRECTORY)" "E:\\" "nrf52832_xxaa.hex"
 	echo $?
 
+flash_linux: $(OUTPUT_DIRECTORY)/nrf52832_xxaa.hex
+	@echo Flashing: $<
+	cp $(OUTPUT_DIRECTORY)/nrf52832_xxaa.hex /media/mayur/DAPLINK/.
+	echo $?
+
 # Flash softdevice
 flash_softdevice:
 	@echo Flashing: s132_nrf52_6.0.0_softdevice.hex
