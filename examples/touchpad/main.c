@@ -70,6 +70,8 @@
 #define LOW                 0
 #define HIGH                1
 
+#define PRINT_XYZ
+#define PRINT_GESTURE
 
 /* Indicates if operation on TWI has ended. */
 static volatile bool mgc3130_xfer_done = false;
@@ -287,6 +289,187 @@ static int get_ts_line_status (void) {
     return FALSE;
 }
 
+void mgc3130_print_gesture(void) {
+    //----------------------------------------
+    if (GestureOutput.Bit.TouchSouth > 0) {
+        NRF_LOG_INFO("%s", TouchSouth);
+    }
+    if (GestureOutput.Bit.TouchWest > 0) {
+        NRF_LOG_INFO("%s", TouchWest);
+    }
+    if (GestureOutput.Bit.TouchNorth > 0) {
+        NRF_LOG_INFO("%s", TouchNorth);
+    }
+    if (GestureOutput.Bit.TouchEast > 0) {
+        NRF_LOG_INFO("%s", TouchEast);
+    }
+    if (GestureOutput.Bit.TouchCentre > 0) {
+        NRF_LOG_INFO("%s", TouchCentre);
+    }	
+    //----------------------------------------
+
+    //----------------------------------------
+    if (GestureOutput.Bit.TapSouth > 0) {
+        NRF_LOG_INFO("%s", TapSouth);
+    }
+    if (GestureOutput.Bit.TapWest > 0) {
+        NRF_LOG_INFO("%s", TapWest);
+    }
+    if (GestureOutput.Bit.TapNorth > 0) {
+        NRF_LOG_INFO("%s", TapNorth);
+    }
+    if (GestureOutput.Bit.TapEast > 0) {
+        NRF_LOG_INFO("%s", TapEast);
+    }
+    if (GestureOutput.Bit.TapCentre > 0) {
+        NRF_LOG_INFO("%s", TapCentre);
+    }
+    //----------------------------------------
+    
+    //----------------------------------------
+    if (GestureOutput.Bit.DoubleTapSouth > 0) {
+        NRF_LOG_INFO("%s", DoubleTapSouth);
+    }
+    if (GestureOutput.Bit.DoubleTapWest > 0) {
+        NRF_LOG_INFO("%s", DoubleTapWest);
+    }
+    if (GestureOutput.Bit.DoubleTapNorth > 0) {
+        NRF_LOG_INFO("%s", DoubleTapNorth);
+    }
+    if (GestureOutput.Bit.DoubleTapEast > 0) {
+        NRF_LOG_INFO("%s", DoubleTapEast);
+    }
+    if (GestureOutput.Bit.DoubleTapCentre > 0) {
+        NRF_LOG_INFO("%s", DoubleTapCentre);
+    }
+    //----------------------------------------
+
+    //----------------------------------------	
+    if (GestureOutput.Bit.GestWestEast > 0) {
+        NRF_LOG_INFO("%s", GestureWestToEast);
+    }
+    if (GestureOutput.Bit.GestEastWest > 0) {
+        NRF_LOG_INFO("%s", GestureEastToWest);
+    }	
+    if (GestureOutput.Bit.GestSouthNorth > 0) {
+        NRF_LOG_INFO("%s", GestureNorthToSouth);
+    }
+    if (GestureOutput.Bit.GestNorthSouth > 0) {
+        NRF_LOG_INFO("%s", GestureSouthToNorth);
+    }
+    if (GestureOutput.Bit.EdgeGestWestEast > 0) {
+        NRF_LOG_INFO("%s", GestureEdgeWestToEast);
+    }
+    if (GestureOutput.Bit.EdgeGestEastWest > 0) {
+        NRF_LOG_INFO("%s", GestureEdgeEastToWest);
+    }
+    if (GestureOutput.Bit.EdgeGestSouthNorth > 0) {
+        NRF_LOG_INFO("%s", GestureEdgeNorthToSouth);
+    }
+    if (GestureOutput.Bit.EdgeGestNorthSouth > 0) {
+        NRF_LOG_INFO("%s", GestureEdgeSouthToNorth);
+    }
+    if (GestureOutput.Bit.GestClockWise > 0) {
+        NRF_LOG_INFO("%s", GestureClockWise);
+    }
+    if (GestureOutput.Bit.GestCounterClockWise > 0) {
+        NRF_LOG_INFO("%s", GestureCounterClockWise);
+    }
+    NRF_LOG_FLUSH();
+    //----------------------------------------	
+}
+
+void mgc3130_printxyz(void) {
+    if (Previous_x_pos != xyzPosition.xyzWord.x_pos) {
+        Previous_x_pos = xyzPosition.xyzWord.x_pos;
+    }
+    if (Previous_y_pos != xyzPosition.xyzWord.y_pos) {
+        Previous_y_pos = xyzPosition.xyzWord.y_pos;
+    }
+    if (Previous_z_pos != xyzPosition.xyzWord.z_pos) {
+        Previous_z_pos = xyzPosition.xyzWord.z_pos;			
+    }
+    NRF_LOG_INFO("X:\t%d\tY:\t%d\tZ:\t%d", 
+        (uint16_t)(xyzPosition.xyzWord.x_pos),
+        (uint16_t)(xyzPosition.xyzWord.y_pos),
+        (uint16_t)(xyzPosition.xyzWord.z_pos));
+    NRF_LOG_FLUSH();
+}
+
+static void mgc3130_decode(void) {
+    uint32_t Mask = 0x00000001;
+
+	if (((TouchInfo.Touch ^ LastTouch) > 0) || ((GestureInfo.Gesture ^ LastGesture) > 0) ) {
+		GestureOutput.Gesture = 0;
+		if ((TouchInfo.Touch ^ LastTouch) > 0) {
+			LastTouch = TouchInfo.Touch;
+			for (int i = 0; i < 15; i++) {
+				if ((TouchInfo.Touch & Mask) > 0) {
+					GestureOutput.Gesture |= Mask; 
+				}
+				Mask = Mask << 1;
+			}
+		} else if ((GestureInfo.Gesture ^ LastGesture) > 0) {
+			LastGesture = GestureInfo.Gesture;
+			switch (GestureInfo.Bit.GestureCode)
+			{
+				case NO_GESTURE:
+				case GESTURE_GARBAGE:
+					break;
+				case GESTURE_WEST_EAST:
+					if (GestureInfo.Bit.EdgeFlick == 0) {
+						GestureOutput.Gesture |= GESTURE_MASK_WEST_EAST;
+					} else {
+						GestureOutput.Gesture |= GESTURE_MASK_EDGE_WEST_EAST;
+					}
+					break;
+				case GESTURE_EAST_WEST:
+					if (GestureInfo.Bit.EdgeFlick == 0) {
+						GestureOutput.Gesture |= GESTURE_MASK_EAST_WEST;
+					} else {
+						GestureOutput.Gesture |= GESTURE_MASK_EDGE_EAST_WEST;
+					}
+					break;
+				case GESTURE_SOUTH_NORTH:
+					if (GestureInfo.Bit.EdgeFlick == 0) {
+						GestureOutput.Gesture |= GESTURE_MASK_SOUTH_NORTH;
+					} else {
+						GestureOutput.Gesture |= GESTURE_MASK_EDGE_SOUTH_NORTH;
+					}
+					break;
+				case GESTURE_NORTH_SOUTH:
+					if (GestureInfo.Bit.EdgeFlick == 0) {
+						GestureOutput.Gesture |= GESTURE_MASK_NORTH_SOUTH;
+					} else {
+						GestureOutput.Gesture |= GESTURE_MASK_EDGE_NORTH_SOUTH;
+					}
+					break;
+				case GESTURE_CLOCK_WISE:
+					GestureOutput.Gesture |= GESTURE_MASK_CLOCK_WISE;
+					break;
+				case GESTURE_COUNTER_CLOCK_WISE:
+					GestureOutput.Gesture |= GESTURE_MASK_COUNTER_CLOCK_WISE;
+					break;
+				default:
+					break;
+			}
+		}
+		//	Remove not desired Touch or Gesture Info. See MASK_FILTER_GESTURE into MGC3130.h file for details
+		GestureOutput.Gesture &= ~(MASK_FILTER_GESTURE);
+	}
+#ifdef PRINT_XYZ
+	mgc3130_printxyz();
+#endif
+#ifdef PRINT_GESTURE
+    mgc3130_print_gesture();
+#endif
+}
+
+static void mgc3130_release_ts_line (void) {
+    nrf_gpio_pin_set(MGC3130_TS_PIN);
+    nrf_gpio_cfg_input(MGC3130_TS_PIN, NRF_GPIO_PIN_PULLUP);
+}
+
 static void mgc3130_get_event (void) {
     nrf_drv_twi_xfer_desc_t xfer = NRF_DRV_TWI_XFER_DESC_RX(MGC3130_ADDR, mgc3130_data, ((first_read) ? MGC3130_FIRST_MESSAGE_SIZE : MGC3130_MESSAGE_SIZE));
     uint32_t flags = 0;
@@ -301,11 +484,20 @@ static void mgc3130_get_event (void) {
         mgc3130_errors++;
     if(first_read)
         first_read = false;
-}
-
-static void mgc3130_release_ts_line (void) {
-    nrf_gpio_pin_set(MGC3130_TS_PIN);
-    nrf_gpio_cfg_input(MGC3130_TS_PIN, NRF_GPIO_PIN_PULLUP);
+    if (mgc3130_data[3] == ID_DATA_OUTPUT) {	
+        for (int i = 0; i < 4; i++) {
+            GestureInfo.GestArray[i] = mgc3130_data[i + 10];
+            TouchInfo.TouchArray[i]  = mgc3130_data[i + 14];
+        }		
+        GestureInfo.Gesture &= MASK_GESTURE_RAW;
+        TouchInfo.Touch     &= MASK_TOUCH_RAW;
+        AirWheelInfo = mgc3130_data[18];
+        for (int i = 0; i < 6; i++) {
+            xyzPosition.xyzArray[i] = mgc3130_data[i + 20];
+        }
+    }
+    mgc3130_release_ts_line();
+    mgc3130_decode();
 }
 
 static void mgc3130_init (void) {
@@ -315,13 +507,15 @@ static void mgc3130_init (void) {
     nrf_gpio_pin_clear(MGC3130_LED1_PIN);
     nrf_gpio_cfg_input(MGC3130_TS_PIN, NRF_GPIO_PIN_PULLUP);
     nrf_gpio_cfg_output(MGC3130_RS_PIN);
-    nrf_gpio_pin_clear(MGC3130_RS_PIN);
-    nrf_delay_ms(40);
     nrf_gpio_pin_set(MGC3130_RS_PIN);
-    nrf_delay_ms(40);
+    nrf_gpio_pin_clear(MGC3130_RS_PIN);
+    nrf_delay_ms(10);
+    nrf_gpio_pin_set(MGC3130_RS_PIN);
+    nrf_delay_ms(50);
     mgc3130_get_event();
-    nrf_delay_ms(163);
+    nrf_delay_ms(200);
     NRF_LOG_INFO("MGC3130 Init Finished");
+    NRF_LOG_FLUSH();
 }
 
 static void mgc3130_reset (void) {
@@ -332,12 +526,11 @@ static void mgc3130_reset (void) {
 static void mgc3130_handle (void) {
     if(get_ts_line_status() == 0) {
         mgc3130_get_event();
-        mgc3130_release_ts_line();
         nrf_gpio_pin_set(MGC3130_LED1_PIN);
     } else {
         nrf_gpio_pin_clear(MGC3130_LED1_PIN);
     }
-    if(mgc3130_errors > 24) {
+    if(mgc3130_errors > 10) {
         mgc3130_reset();
         mgc3130_errors = 0;
     }

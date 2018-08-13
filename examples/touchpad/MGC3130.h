@@ -239,7 +239,7 @@ uint8_t	AirWheelInfo;
 
 //----------------------------------------
 //	X-Y-Z Position
-union  xyzPosition{
+static union  xyzPosition{
 	struct {
 		uint16_t x_pos;
 		uint16_t y_pos;
@@ -334,5 +334,36 @@ union TouchInfo {
 uint16_t Previous_x_pos;
 uint16_t Previous_y_pos;
 uint16_t Previous_z_pos;
+
+const char TouchSouth[]   = "Touch South";
+const char TouchWest[]    = "Touch West";
+const char TouchNorth[]   = "Touch North";
+const char TouchEast[]    = "Touch East";
+const char TouchCentre[]  = "Touch Centre";
+
+const char TapSouth[]   = "Tap South";
+const char TapWest[]    = "Tap West";
+const char TapNorth[]   = "Tap North";
+const char TapEast[]    = "Tap East";
+const char TapCentre[]  = "Tap Centre";
+
+const char DoubleTapSouth[]   = "Double Tap South";
+const char DoubleTapWest[]    = "Double Tap West";
+const char DoubleTapNorth[]   = "Double Tap North";
+const char DoubleTapEast[]    = "Double Tap East";
+const char DoubleTapCentre[]  = "Double Tap Centre";
+
+const char GestureWestToEast[]    = "Gesture West to East";
+const char GestureEastToWest[]    = "Gesture East to West";
+const char GestureNorthToSouth[]  = "Gesture North to South";
+const char GestureSouthToNorth[]  = "Gesture South to North";
+
+const char GestureEdgeWestToEast[]    = "Gesture Edge West to East";
+const char GestureEdgeEastToWest[]    = "Gesture Edge East to West";
+const char GestureEdgeNorthToSouth[]  = "Gesture Edge North to South";
+const char GestureEdgeSouthToNorth[]  = "Gesture Edge South to North";	
+
+const char GestureClockWise[]         = "Gesture Clock Wise";	
+const char GestureCounterClockWise[]  = "Gesture Counter Clock Wise";	
 
 #endif
