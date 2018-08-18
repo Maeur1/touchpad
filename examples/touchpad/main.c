@@ -53,6 +53,11 @@
  */
 
 
+#define PRINT_XYZ //Prints out XYZ position above touchpad
+#define PRINT_GESTURE //Prints out Gestures from the touchpad
+#define USE_DRV2605 //Enables Vibration Communication
+#define USE_MGC3130 //Enables 3D touchpad
+
 #include <stdio.h>
 #include "boards.h"
 #include "app_util_platform.h"
@@ -64,27 +69,28 @@
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
-#include "MGC3130.h"
+#ifdef USE_MGC3130
+    #include "MGC3130.h"
+#endif
 #include "DRV2605.h"
 
 #define LOW                 0
 #define HIGH                1
-
-#define PRINT_XYZ
-#define PRINT_GESTURE
 
 /* Indicates if operation on TWI has ended. */
 static volatile bool mgc3130_xfer_done = false;
 static volatile bool drv2605_xfer_done = false;
 
 /* TWI instance. */
-static const nrf_drv_twi_t mgc3130_twi = NRF_DRV_TWI_INSTANCE(0);
 static const nrf_drv_twi_t drv2605_twi = NRF_DRV_TWI_INSTANCE(1);
 
+#ifdef USE_MGC3130
 /* MGCData */
+static const nrf_drv_twi_t mgc3130_twi = NRF_DRV_TWI_INSTANCE(0);
 static uint8_t mgc3130_data[255];
-static bool first_read;
+static bool first_read = true;
 static int mgc3130_errors = 0;
+#endif
 
 // static void on_hids_evt(ble_hids_t * p_hids, ble_hids_evt_t * p_evt);
 
@@ -149,6 +155,8 @@ void twi_init (void)
 {
     ret_code_t err_code;
 
+#ifdef USE_MGC3130
+
     const nrf_drv_twi_config_t mgc3130_twi_config = {
        .scl                = MGC3130_TWI_SCL,
        .sda                = MGC3130_TWI_SDA,
@@ -156,6 +164,13 @@ void twi_init (void)
        .interrupt_priority = APP_IRQ_PRIORITY_HIGH,
        .clear_bus_init     = false
     };
+
+    err_code = nrf_drv_twi_init(&mgc3130_twi, &mgc3130_twi_config, mgc3130_twi_handler, NULL);
+    APP_ERROR_CHECK(err_code);
+
+    nrf_drv_twi_enable(&mgc3130_twi);
+
+#endif
 
     const nrf_drv_twi_config_t drv2605_twi_config = {
        .scl                = DRV2605_TWI_SCL,
@@ -165,15 +180,13 @@ void twi_init (void)
        .clear_bus_init     = false
     };
 
-    err_code = nrf_drv_twi_init(&mgc3130_twi, &mgc3130_twi_config, mgc3130_twi_handler, NULL);
-    APP_ERROR_CHECK(err_code);
-
     err_code = nrf_drv_twi_init(&drv2605_twi, &drv2605_twi_config, drv2605_twi_handler, NULL);
     APP_ERROR_CHECK(err_code);
 
-    nrf_drv_twi_enable(&mgc3130_twi);
     nrf_drv_twi_enable(&drv2605_twi);
 }
+
+#ifdef USE_DRV2605
 
 uint8_t drv2605_read_register_8(uint8_t reg) {
     uint8_t rx_data;
@@ -253,23 +266,23 @@ void drv2605_init (void) {
     NRF_LOG_INFO("ID: %x", id); 
     NRF_LOG_FLUSH();
     drv2605_auto_calibrate();
-    // drv2605_write_register_8(DRV2605_REG_RATEDV, 155);
-    // id = drv2605_read_register_8(DRV2605_REG_RATEDV);
-    // NRF_LOG_INFO("Voltage Value: %d", id); 
+    drv2605_write_register_8(DRV2605_REG_RATEDV, 255);
+    id = drv2605_read_register_8(DRV2605_REG_RATEDV);
+    NRF_LOG_INFO("Voltage Value: %d", id); 
 
-    // drv2605_write_register_8(DRV2605_REG_MODE, 0x00); // out of standby
+    drv2605_write_register_8(DRV2605_REG_MODE, 0x00); // out of standby
 
-    // drv2605_write_register_8(DRV2605_REG_RTPIN, 0x00); // no real-time-playback
+    drv2605_write_register_8(DRV2605_REG_RTPIN, 0x00); // no real-time-playback
 
-    // drv2605_write_register_8(DRV2605_REG_WAVESEQ1, 1); // strong click
-    // drv2605_write_register_8(DRV2605_REG_WAVESEQ2, 0);
+    drv2605_write_register_8(DRV2605_REG_WAVESEQ1, 1); // strong click
+    drv2605_write_register_8(DRV2605_REG_WAVESEQ2, 0);
 
-    // drv2605_write_register_8(DRV2605_REG_OVERDRIVE, 0); // no overdrive
+    drv2605_write_register_8(DRV2605_REG_OVERDRIVE, 0); // no overdrive
 
-    // drv2605_write_register_8(DRV2605_REG_SUSTAINPOS, 0);
-    // drv2605_write_register_8(DRV2605_REG_SUSTAINNEG, 0);
-    // drv2605_write_register_8(DRV2605_REG_BREAK, 0);
-    // drv2605_write_register_8(DRV2605_REG_AUDIOMAX, 0x64);
+    drv2605_write_register_8(DRV2605_REG_SUSTAINPOS, 0);
+    drv2605_write_register_8(DRV2605_REG_SUSTAINNEG, 0);
+    drv2605_write_register_8(DRV2605_REG_BREAK, 0);
+    drv2605_write_register_8(DRV2605_REG_AUDIOMAX, 0x64);
 
     // // ERM open loop
 
@@ -279,6 +292,10 @@ void drv2605_init (void) {
     drv2605_write_register_8(DRV2605_REG_CONTROL3, drv2605_read_register_8(DRV2605_REG_CONTROL3) | 0x01);
     
 }
+
+#endif
+
+#ifdef USE_MGC3130
 
 static int get_ts_line_status (void) {
     if(nrf_gpio_pin_read(MGC3130_TS_PIN) == 0) {
@@ -530,40 +547,44 @@ static void mgc3130_handle (void) {
     } else {
         nrf_gpio_pin_clear(MGC3130_LED1_PIN);
     }
-    if(mgc3130_errors > 10) {
+    if(mgc3130_errors > 30) {
         mgc3130_reset();
         mgc3130_errors = 0;
     }
     nrf_delay_us(200);
 }
+#endif
 
 /**@brief Function for application main entry.
  */
 int main(void)
 {
     // bool erase_bonds = false;
-    first_read = true;
 
     // Initialize.
     log_init();
 
     twi_init();
+#ifdef USE_MGC3130
     mgc3130_init();
-    // drv2605_init();    
-    // drv2605_select_library(1);
+#endif
 
-    // drv2605_set_waveform(5, 0);
-    // for(int i = 0; i < 117; i++) {
-    //     drv2605_set_waveform(0, i);
-    //     drv2605_set_waveform(1, i);
-    //     drv2605_set_waveform(2, i);
-    //     drv2605_set_waveform(3, i);
-    //     drv2605_set_waveform(4, i);
-    //     drv2605_go();
-    //     NRF_LOG_INFO("Effect: %d", i);
-    //     NRF_LOG_FLUSH();
-    //     while(drv2605_read_register_8(DRV2605_REG_GO)){}
-    // }
+#ifdef USE_DRV2605
+    drv2605_init();    
+    drv2605_select_library(1);
+
+    drv2605_set_waveform(5, 0);
+    for(int i = 0; i < 117; i++) {
+        drv2605_set_waveform(0, i);
+        drv2605_set_waveform(1, 0);
+        drv2605_go();
+        NRF_LOG_INFO("Effect: %d", i);
+        NRF_LOG_FLUSH();
+        while(drv2605_read_register_8(DRV2605_REG_GO)){}
+        nrf_delay_ms(1000);
+    }
+
+#endif
 
     // Start execution.
     NRF_LOG_INFO("HID Mouse example started.");
@@ -572,6 +593,8 @@ int main(void)
     // Enter main loop.
     for (;;)
     {
-        mgc3130_handle();        
+#ifdef USE_MGC3130
+        mgc3130_handle();
+#endif
     }
 }
