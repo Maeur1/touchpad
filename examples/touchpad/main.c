@@ -573,8 +573,7 @@ int main(void)
     drv2605_init();    
     drv2605_select_library(1);
 
-    drv2605_set_waveform(5, 0);
-    for(int i = 0; i < 117; i++) {
+    for(int i = 0; i < 1; i++) {
         drv2605_set_waveform(0, i);
         drv2605_set_waveform(1, 0);
         drv2605_go();
