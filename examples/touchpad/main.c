@@ -54,7 +54,7 @@
 
 
 #define PRINT_XYZ //Prints out XYZ position above touchpad
-#define PRINT_GESTURE //Prints out Gestures from the touchpad
+// #define PRINT_GESTURE //Prints out Gestures from the touchpad
 #define USE_DRV2605 //Enables Vibration Communication
 #define USE_MGC3130 //Enables 3D touchpad
 
@@ -82,7 +82,9 @@ static volatile bool mgc3130_xfer_done = false;
 static volatile bool drv2605_xfer_done = false;
 
 /* TWI instance. */
+#ifdef USE_DRV2605
 static const nrf_drv_twi_t drv2605_twi = NRF_DRV_TWI_INSTANCE(1);
+#endif
 
 #ifdef USE_MGC3130
 /* MGCData */
@@ -128,6 +130,9 @@ void mgc3130_twi_handler(nrf_drv_twi_evt_t const * p_event, void * p_context)
         case NRF_DRV_TWI_EVT_DONE:
             mgc3130_xfer_done = true;
             break;
+        case NRF_DRV_TWI_EVT_ADDRESS_NACK:
+            mgc3130_xfer_done = true;
+            break;
         default:
             break;
     }
@@ -162,7 +167,7 @@ void twi_init (void)
        .sda                = MGC3130_TWI_SDA,
        .frequency          = NRF_DRV_TWI_FREQ_100K,
        .interrupt_priority = APP_IRQ_PRIORITY_HIGH,
-       .clear_bus_init     = false
+       .clear_bus_init     = true
     };
 
     err_code = nrf_drv_twi_init(&mgc3130_twi, &mgc3130_twi_config, mgc3130_twi_handler, NULL);
@@ -171,19 +176,21 @@ void twi_init (void)
     nrf_drv_twi_enable(&mgc3130_twi);
 
 #endif
+#ifdef USE_DRV2605
 
     const nrf_drv_twi_config_t drv2605_twi_config = {
        .scl                = DRV2605_TWI_SCL,
        .sda                = DRV2605_TWI_SDA,
        .frequency          = NRF_DRV_TWI_FREQ_100K,
        .interrupt_priority = APP_IRQ_PRIORITY_HIGH,
-       .clear_bus_init     = false
+       .clear_bus_init     = true
     };
 
     err_code = nrf_drv_twi_init(&drv2605_twi, &drv2605_twi_config, drv2605_twi_handler, NULL);
     APP_ERROR_CHECK(err_code);
 
     nrf_drv_twi_enable(&drv2605_twi);
+#endif
 }
 
 #ifdef USE_DRV2605
@@ -487,6 +494,27 @@ static void mgc3130_release_ts_line (void) {
     nrf_gpio_cfg_input(MGC3130_TS_PIN, NRF_GPIO_PIN_PULLUP);
 }
 
+static void mgc3130_init (void) {
+    nrf_gpio_cfg_output(MGC3130_LED0_PIN);
+    nrf_gpio_pin_clear(MGC3130_LED0_PIN);
+    nrf_gpio_cfg_output(MGC3130_LED1_PIN);
+    nrf_gpio_pin_clear(MGC3130_LED1_PIN);
+    nrf_gpio_cfg_input(MGC3130_TS_PIN, NRF_GPIO_PIN_PULLUP);
+    nrf_gpio_cfg_output(MGC3130_RS_PIN);
+    nrf_gpio_pin_set(MGC3130_RS_PIN);
+    nrf_gpio_pin_clear(MGC3130_RS_PIN);
+    nrf_delay_ms(10);
+    nrf_gpio_pin_set(MGC3130_RS_PIN);
+    nrf_delay_ms(50);
+    NRF_LOG_INFO("MGC3130 Init Finished");
+    NRF_LOG_FLUSH();
+}
+
+static void mgc3130_reset (void) {
+    first_read = true;
+    mgc3130_init();
+}
+
 static void mgc3130_get_event (void) {
     nrf_drv_twi_xfer_desc_t xfer = NRF_DRV_TWI_XFER_DESC_RX(MGC3130_ADDR, mgc3130_data, ((first_read) ? MGC3130_FIRST_MESSAGE_SIZE : MGC3130_MESSAGE_SIZE));
     uint32_t flags = 0;
@@ -496,7 +524,6 @@ static void mgc3130_get_event (void) {
         __WFE();
     } while (mgc3130_xfer_done == false);
     APP_ERROR_CHECK(ret);
-    // ACTUAL_NRF_LOG_RAW_HEXDUMP_INFO(mgc3130_data, ((first_read) ? MGC3130_FIRST_MESSAGE_SIZE : MGC3130_MESSAGE_SIZE));
     if(mgc3130_data[0] == 0)
         mgc3130_errors++;
     if(first_read)
@@ -515,29 +542,6 @@ static void mgc3130_get_event (void) {
     }
     mgc3130_release_ts_line();
     mgc3130_decode();
-}
-
-static void mgc3130_init (void) {
-    nrf_gpio_cfg_output(MGC3130_LED0_PIN);
-    nrf_gpio_pin_clear(MGC3130_LED0_PIN);
-    nrf_gpio_cfg_output(MGC3130_LED1_PIN);
-    nrf_gpio_pin_clear(MGC3130_LED1_PIN);
-    nrf_gpio_cfg_input(MGC3130_TS_PIN, NRF_GPIO_PIN_PULLUP);
-    nrf_gpio_cfg_output(MGC3130_RS_PIN);
-    nrf_gpio_pin_set(MGC3130_RS_PIN);
-    nrf_gpio_pin_clear(MGC3130_RS_PIN);
-    nrf_delay_ms(10);
-    nrf_gpio_pin_set(MGC3130_RS_PIN);
-    nrf_delay_ms(50);
-    mgc3130_get_event();
-    nrf_delay_ms(200);
-    NRF_LOG_INFO("MGC3130 Init Finished");
-    NRF_LOG_FLUSH();
-}
-
-static void mgc3130_reset (void) {
-    first_read = true;
-    mgc3130_init();
 }
 
 static void mgc3130_handle (void) {
@@ -564,9 +568,12 @@ int main(void)
     // Initialize.
     log_init();
 
+    NRF_LOG_INFO("Starting Init of TWI\n");
     twi_init();
 #ifdef USE_MGC3130
+    NRF_LOG_INFO("Starting Init of MGC3130\n");
     mgc3130_init();
+    mgc3130_get_event();
 #endif
 
 #ifdef USE_DRV2605
