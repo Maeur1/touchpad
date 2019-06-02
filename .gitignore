@@ -1,3 +1,7 @@
 #Build Files
 _build/
 _Preview/
+
+# ignore all . files but include . folders
+.*
+!.*/
