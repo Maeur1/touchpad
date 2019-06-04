@@ -1,8 +1,8 @@
 #Build Files
 _build/
 _Preview/
-.vscode/
 
 # ignore all . files but include . folders
 .*
-!.*/
+.*/
+!/.gitignore
