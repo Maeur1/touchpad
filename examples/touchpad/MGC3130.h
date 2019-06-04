@@ -1,68 +1,28 @@
-/*  ===========================================================================
-#  This is the library for MGC3130. 
-#  
-#  MGC3130 is a device that lets you control your hardware projects in a whole new way.  
-#  MGC3130 detects hands movements and converts these  in gestures. These gestures
-#  permit to manage a device without touch it. 
-#
-#  Written by Matteo Destro for Futura Group srl
-#  www.Futurashop.it
-#  www.open-electronics.org
-#
-#  BSD license, all text above must be included in any redistribution
-#  ===========================================================================
-#
-#	REVISION	1.0.0	22/03/2015
-#
-#	First release
-#
-#  ===========================================================================
-#
-#	REVISION	1.1.0	13/03/2016
-#
-#	- Fixed Bug print North to South gestic and South to North gestic
-#
-#	- Added new gesture recognitions:
-#		*	Gesture Wave X
-#		*	Gesture Wave Y
-#		*	Gesture Hold
-#		*	Gesture Presence
-#		*	Gesture Double West To East 
-#		*	Gesture Double East To Weast 
-#		*	Gesture Double North To South 
-#		*	Gesture Double South To North 
-#
-#  ===========================================================================
-#
-#  INSTALLATION
-#  The 3 library files (MGC3130.cpp, MGC3130.h and keywords.txt) in the MGC3130 folder should be placed in your Arduino Library folder.
-#  Run the MGC3130_Demo.ino file from your Arduino IDE.
-#
-#  SUPPORT
-#
-#  info@open-electronics.org
-#
-#  ===========================================================================*/
-
-
 #ifndef _MGC3130_H
 #define _MGC3130_H
 
-#define MGC3130_TWI_SDA		11        
-#define MGC3130_TWI_SCL		12        
-#define MGC3130_ADDR       	0x42U
-#define MGC3130_TS_PIN     	14
-#define MGC3130_RS_PIN     	13
-#define MGC3130_LED0_PIN   	15 
-#define MGC3130_LED1_PIN   	16
-
-#define TRUE  0
-#define FALSE 1
+#include "nrf_gpio.h"
+#include "nrf_delay.h"
+#include "nrf_drv_twi.h"
+#include "nrf_drv_gpiote.h"
+#include "nrf_log.h"
 
 #define PRINT_RAW_FW_INFO	//	Enable Print on Serial interface of RAW Firmware Info
 #define PRINT_RAW_DATA		//	Enable Print on Serial interface of RAW data
 #define PRINT_GESTURE_DATA	//	Enable Print on Serial interface of Gesture recognized
-//#define PRINT_XYZ			//	Enable Print on serial interface of xyz coordinates
+// #define PRINT_XYZ			//	Enable Print on serial interface of xyz coordinates
+
+// #define DEBUG_MGC3130
+#define MGC3130_ADDRESS					0x42
+#define MGC3130_SCL                     27
+#define MGC3130_SDA                     26
+#define MGC3130_TS                      25
+#define MGC3130_MCLR                    24
+#define MGC3130_IRQ0                    23
+#define MGC3130_IRQ1                    22
+#define MGC3130_RESET_DELAY_MS          250
+#define DEBUG_LED                       20
+#define MIDDLE_VALUE					32767
 
 //-----------------------------------------------------------------------
 //	MGC3130 CMD ID
@@ -179,6 +139,9 @@
 #define MGC3130_MESSAGE_SIZE			0x1A
 
 //----------------------------------------
+
+
+//----------------------------------------
 //	Gesture decoded. Global variable
 union GestureOutput {
 	uint64_t Gesture;
@@ -235,26 +198,6 @@ union GestureOutput {
 //----------------------------------------
 //	AirWheel Variable
 uint8_t	AirWheelInfo;
-//----------------------------------------
-
-//----------------------------------------
-//	X-Y-Z Position
-static union  xyzPosition{
-	struct {
-		uint16_t x_pos;
-		uint16_t y_pos;
-		uint16_t z_pos;
-	} xyzWord;
-	uint8_t  xyzArray[6];
-	struct {
-		uint8_t  Byte_0;
-		uint8_t  Byte_1;
-		uint8_t  Byte_2;
-		uint8_t  Byte_3;
-		uint8_t  Byte_4;
-		uint8_t  Byte_5;
-	} xyzByte;
-} xyzPosition;
 //----------------------------------------
 
 //----------------------------------------
@@ -331,39 +274,17 @@ union TouchInfo {
 } TouchInfo;
 //----------------------------------------
 
+
 uint16_t Previous_x_pos;
 uint16_t Previous_y_pos;
 uint16_t Previous_z_pos;
+int32_t delta_x;
+int32_t delta_y;
 
-const char TouchSouth[]   = "Touch South";
-const char TouchWest[]    = "Touch West";
-const char TouchNorth[]   = "Touch North";
-const char TouchEast[]    = "Touch East";
-const char TouchCentre[]  = "Touch Centre";
-
-const char TapSouth[]   = "Tap South";
-const char TapWest[]    = "Tap West";
-const char TapNorth[]   = "Tap North";
-const char TapEast[]    = "Tap East";
-const char TapCentre[]  = "Tap Centre";
-
-const char DoubleTapSouth[]   = "Double Tap South";
-const char DoubleTapWest[]    = "Double Tap West";
-const char DoubleTapNorth[]   = "Double Tap North";
-const char DoubleTapEast[]    = "Double Tap East";
-const char DoubleTapCentre[]  = "Double Tap Centre";
-
-const char GestureWestToEast[]    = "Gesture West to East";
-const char GestureEastToWest[]    = "Gesture East to West";
-const char GestureNorthToSouth[]  = "Gesture North to South";
-const char GestureSouthToNorth[]  = "Gesture South to North";
-
-const char GestureEdgeWestToEast[]    = "Gesture Edge West to East";
-const char GestureEdgeEastToWest[]    = "Gesture Edge East to West";
-const char GestureEdgeNorthToSouth[]  = "Gesture Edge North to South";
-const char GestureEdgeSouthToNorth[]  = "Gesture Edge South to North";	
-
-const char GestureClockWise[]         = "Gesture Clock Wise";	
-const char GestureCounterClockWise[]  = "Gesture Counter Clock Wise";	
+void mgc3130_init(const nrf_drv_twi_t* twi, void (*call)(int16_t, int16_t));
+void mgc3130_reset(void);
+void mgc3130_read_data(void);
+void mgc3130_print_raw_firmware_info(void);
+void mgc3130_print_xyz(void);
 
 #endif

@@ -1,30 +1,30 @@
 /**
- * Copyright (c) 2016 - 2018, Nordic Semiconductor ASA
- * 
+ * Copyright (c) 2016 - 2019, Nordic Semiconductor ASA
+ *
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice, this
  *    list of conditions and the following disclaimer.
- * 
+ *
  * 2. Redistributions in binary form, except as embedded into a Nordic
  *    Semiconductor ASA integrated circuit in a product or a software update for
  *    such product, must reproduce the above copyright notice, this list of
  *    conditions and the following disclaimer in the documentation and/or other
  *    materials provided with the distribution.
- * 
+ *
  * 3. Neither the name of Nordic Semiconductor ASA nor the names of its
  *    contributors may be used to endorse or promote products derived from this
  *    software without specific prior written permission.
- * 
+ *
  * 4. This software, with or without modification, must only be used with a
  *    Nordic Semiconductor ASA integrated circuit.
- * 
+ *
  * 5. Any software provided in binary form under this license must not be reverse
  *    engineered, decompiled, modified and/or disassembled.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY NORDIC SEMICONDUCTOR ASA "AS IS" AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -35,7 +35,7 @@
  * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
+ *
  */
 /** @file
  * @defgroup tw_scanner main.c
@@ -52,7 +52,7 @@
 #include "app_util_platform.h"
 #include "app_error.h"
 #include "nrf_drv_twi.h"
-#include "nrf_delay.h"
+
 
 
 #include "nrf_log.h"
@@ -94,23 +94,6 @@ void twi_init (void)
     nrf_drv_twi_enable(&m_twi);
 }
 
-#define MGC_3130_TS_PIN     25
-#define MGC_3130_RS_PIN     18
-
-/**
- * @brief MGC3130 initialization.
- */
-void mgc3130_init (void)
-{
-    nrf_gpio_cfg_input(MGC_3130_TS_PIN, NRF_GPIO_PIN_PULLUP);
-    nrf_gpio_cfg_output(MGC_3130_RS_PIN);
-    nrf_gpio_pin_write(MGC_3130_RS_PIN, 0);
-    nrf_delay_ms(250);
-    nrf_gpio_pin_write(MGC_3130_RS_PIN, 1);
-    nrf_delay_ms(250);
-    NRF_LOG_INFO("MGC3130 Ready.");
-}
-
 
 /**
  * @brief Function for main application entry.
@@ -128,7 +111,6 @@ int main(void)
     NRF_LOG_INFO("TWI scanner started.");
     NRF_LOG_FLUSH();
     twi_init();
-    mgc3130_init();
 
     for (address = 1; address <= TWI_ADDRESSES; address++)
     {
