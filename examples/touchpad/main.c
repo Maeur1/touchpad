@@ -137,7 +137,6 @@
 
 #define OUTPUT_REPORT_INDEX             0                                           /**< Index of Output Report. */
 #define OUTPUT_REPORT_MAX_LEN           1                                           /**< Maximum length of Output Report. */
-#define INPUT_REPORT_KEYS_INDEX             0                                          /**< Index of Input Report. */
 #define OUTPUT_REPORT_BIT_MASK_CAPS_LOCK    0x02                                    /**< CAPS LOCK bit in Output Report (based on 'LED Page (0x08)' of the Universal Serial Bus HID Usage Tables). */
 #define MOVEMENT_SPEED                  5                                           /**< Number of pixels by which the cursor is moved each time a button is pushed. */
 #define INPUT_REPORT_COUNT              3                                           /**< Number of input reports in this application. */
@@ -147,9 +146,11 @@
 #define INPUT_REP_BUTTONS_INDEX         0                                           /**< Index of Mouse Input Report containing button data. */
 #define INPUT_REP_MOVEMENT_INDEX        1                                           /**< Index of Mouse Input Report containing movement data. */
 #define INPUT_REP_MPLAYER_INDEX         2                                           /**< Index of Mouse Input Report containing media player data. */
+#define INPUT_REPORT_KEYS_INDEX         3                                           /**< Index of Keyboard Input Report. */
 #define INPUT_REP_REF_BUTTONS_ID        1                                           /**< Id of reference to Mouse Input Report containing button data. */
 #define INPUT_REP_REF_MOVEMENT_ID       2                                           /**< Id of reference to Mouse Input Report containing movement data. */
 #define INPUT_REP_REF_MPLAYER_ID        3                                           /**< Id of reference to Mouse Input Report containing media player data. */
+#define INPUT_REP_REF_KEYBOARD_ID       4                                           /**< Id of reference to Keyboard Input Report containing key. */
 
 #define BASE_USB_HID_SPEC_VERSION       0x0101                                      /**< Version number of base USB HID Specification implemented by this application. */
 
@@ -246,7 +247,8 @@ BLE_HIDS_DEF(m_hids,                                                            
              NRF_SDH_BLE_TOTAL_LINK_COUNT,
              INPUT_REP_BUTTONS_LEN,
              INPUT_REP_MOVEMENT_LEN,
-             INPUT_REP_MEDIA_PLAYER_LEN);
+             INPUT_REP_MEDIA_PLAYER_LEN,
+             INPUT_REPORT_KEYS_MAX_LEN);
 NRF_BLE_GATT_DEF(m_gatt);                                                           /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                                             /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);                                                 /**< Advertising module instance. */
@@ -703,15 +705,15 @@ static void hids_init(void)
 
         // Report ID 2: Mouse motion
         0x85, 0x02,       // Report Id 2
-        0x09, 0x01,       // Usage (Pointer)
+        0x09, 0x01,       // Usage (Consumer)
         0xA1, 0x00,       // Collection (Physical)
         0x75, 0x0C,       // Report Size (12)
         0x95, 0x02,       // Report Count (2)
         0x05, 0x01,       // Usage Page (Generic Desktop)
         0x09, 0x30,       // Usage (X)
         0x09, 0x31,       // Usage (Y)
-        0x16, 0x01, 0xF8, // Logical maximum (2047)
-        0x26, 0xFF, 0x07, // Logical minimum (-2047)
+        0x16, 0x01, 0xF8, // Logical minimum (-2047)
+        0x26, 0xFF, 0x07, // Logical maximum (2047)
         0x81, 0x06,       // Input (Data, Variable, Relative)
         0xC0,             // End Collection (Physical)
         0xC0,             // End Collection (Application)
@@ -743,7 +745,23 @@ static void hids_init(void)
         0x81, 0x06,       // Input (Data,Value,Relative,Bit Field)
         0x0A, 0x24, 0x02, // Usage (AC Back)
         0x81, 0x06,       // Input (Data,Value,Relative,Bit Field)
-        0xC0              // End Collection
+        0xC0,              // End Collection (Application)
+
+        0x05, 0x01,       // Usage Page (Generic Desktop)
+        0x09, 0x06,       // Usage (Keyboard)
+        0xA1, 0x01,       // Collection (Application)
+        0x85, 0x04,       // Report Id (4)
+
+        0x95, 0x06,       // Report Count (6)
+        0x75, 0x08,       // Report Size (8)
+        0x15, 0x00,       // Logical Minimum (0)
+        0x25, 0x65,       // Logical Maximum (101)
+        0x05, 0x07,       // Usage Page (Key codes)
+        0x19, 0x00,       // Usage Minimum (0)
+        0x29, 0x65,       // Usage Maximum (101)
+        0x81, 0x00,       // Input (Data, Array) Key array(6 bytes)
+
+        0xC0              // End Collection (Application)
     };
 
     memset(inp_rep_array, 0, sizeof(inp_rep_array));
@@ -775,13 +793,22 @@ static void hids_init(void)
     p_input_report->sec.wr      = SEC_JUST_WORKS;
     p_input_report->sec.rd      = SEC_JUST_WORKS;
 
+    p_input_report                      = &inp_rep_array[INPUT_REPORT_KEYS_INDEX];
+    p_input_report->max_len             = INPUT_REPORT_KEYS_MAX_LEN;
+    p_input_report->rep_ref.report_id   = INPUT_REP_REF_KEYBOARD_ID;
+    p_input_report->rep_ref.report_type = BLE_HIDS_REP_TYPE_INPUT;
+
+    p_input_report->sec.cccd_wr = SEC_JUST_WORKS;
+    p_input_report->sec.wr      = SEC_JUST_WORKS;
+    p_input_report->sec.rd      = SEC_JUST_WORKS;
+
     hid_info_flags = HID_INFO_FLAG_REMOTE_WAKE_MSK | HID_INFO_FLAG_NORMALLY_CONNECTABLE_MSK;
 
     memset(&hids_init_obj, 0, sizeof(hids_init_obj));
 
     hids_init_obj.evt_handler                    = on_hids_evt;
     hids_init_obj.error_handler                  = service_error_handler;
-    hids_init_obj.is_kb                          = false;
+    hids_init_obj.is_kb                          = true;
     hids_init_obj.is_mouse                       = true;
     hids_init_obj.inp_rep_count                  = INPUT_REPORT_COUNT;
     hids_init_obj.p_inp_rep_array                = inp_rep_array;
@@ -804,12 +831,17 @@ static void hids_init(void)
     hids_init_obj.boot_mouse_inp_rep_sec.wr      = SEC_JUST_WORKS;
     hids_init_obj.boot_mouse_inp_rep_sec.rd      = SEC_JUST_WORKS;
 
+    hids_init_obj.boot_kb_inp_rep_sec.cccd_wr = SEC_JUST_WORKS;
+    hids_init_obj.boot_kb_inp_rep_sec.rd      = SEC_JUST_WORKS;
+
     hids_init_obj.protocol_mode_rd_sec = SEC_JUST_WORKS;
     hids_init_obj.protocol_mode_wr_sec = SEC_JUST_WORKS;
     hids_init_obj.ctrl_point_wr_sec    = SEC_JUST_WORKS;
 
     err_code = ble_hids_init(&m_hids, &hids_init_obj);
+    NRF_LOG_INFO("CHECKING ERROR");
     APP_ERROR_CHECK(err_code);
+    NRF_LOG_INFO("SENT");
 }
 
 
