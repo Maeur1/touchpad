@@ -167,7 +167,7 @@
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
 #define MODIFIER_KEY_POS                    0                                          /**< Position of the modifier byte in the Input Report. */
-#define SCAN_CODE_POS                       2                                          /**< The start position of the key scan code in a HID Report. */
+#define SCAN_CODE_POS                       3                                          /**< The start position of the key scan code in a HID Report. */
 #define SHIFT_KEY_CODE                      0x02                                       /**< Key code indicating the press of the Shift Key. */
 
 #define MAX_KEYS_IN_ONE_REPORT              (INPUT_REPORT_KEYS_MAX_LEN - SCAN_CODE_POS)/**< Maximum number of key presses that can be sent in one Input Report. */
@@ -839,9 +839,7 @@ static void hids_init(void)
     hids_init_obj.ctrl_point_wr_sec    = SEC_JUST_WORKS;
 
     err_code = ble_hids_init(&m_hids, &hids_init_obj);
-    NRF_LOG_INFO("CHECKING ERROR");
     APP_ERROR_CHECK(err_code);
-    NRF_LOG_INFO("SENT");
 }
 
 
@@ -973,7 +971,7 @@ static uint32_t send_key_scan_press_release(ble_hids_t * p_hids,
     ret_code_t err_code;
     uint16_t offset;
     uint16_t data_len;
-    uint8_t  data[INPUT_REPORT_KEYS_MAX_LEN];
+    uint8_t  data[INPUT_REPORT_COUNT + INPUT_REPORT_KEYS_MAX_LEN];
 
     // HID Report Descriptor enumerates an array of size 6, the pattern hence shall not be any
     // longer than this.
@@ -997,6 +995,7 @@ static uint32_t send_key_scan_press_release(ble_hids_t * p_hids,
             data[MODIFIER_KEY_POS] |= SHIFT_KEY_CODE;
         }
 
+        NRF_LOG_INFO("Sending keyboard now");
         if (!m_in_boot_mode)
         {
             err_code = ble_hids_inp_rep_send(p_hids,
@@ -1007,7 +1006,6 @@ static uint32_t send_key_scan_press_release(ble_hids_t * p_hids,
         }
         else
         {
-            NRF_LOG_INFO("Sending keyboard now");
             err_code = ble_hids_boot_kb_inp_rep_send(p_hids,
                                                      INPUT_REPORT_KEYS_MAX_LEN,
                                                      data,
