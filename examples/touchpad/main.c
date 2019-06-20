@@ -127,7 +127,7 @@
 #define SEC_PARAM_MIN_KEY_SIZE          7                                           /**< Minimum encryption key size. */
 #define SEC_PARAM_MAX_KEY_SIZE          16                                          /**< Maximum encryption key size. */
 
-#define SWIFT_PAIR_SUPPORTED            1                                           /**< Swift Pair feature is supported. */
+#define SWIFT_PAIR_SUPPORTED            0                                           /**< Swift Pair feature is supported. */
 #if SWIFT_PAIR_SUPPORTED == 1
 #define MICROSOFT_VENDOR_ID             0x0006                                      /**< Microsoft Vendor ID.*/
 #define MICROSOFT_BEACON_ID             0x03                                        /**< Microsoft Beacon ID, used to indicate that Swift Pair feature is supported. */
@@ -139,7 +139,7 @@
 #define OUTPUT_REPORT_MAX_LEN           1                                           /**< Maximum length of Output Report. */
 #define OUTPUT_REPORT_BIT_MASK_CAPS_LOCK    0x02                                    /**< CAPS LOCK bit in Output Report (based on 'LED Page (0x08)' of the Universal Serial Bus HID Usage Tables). */
 #define MOVEMENT_SPEED                  5                                           /**< Number of pixels by which the cursor is moved each time a button is pushed. */
-#define INPUT_REPORT_COUNT              3                                           /**< Number of input reports in this application. */
+#define INPUT_REPORT_COUNT              4                                           /**< Number of input reports in this application. */
 #define INPUT_REP_BUTTONS_LEN           3                                           /**< Length of Mouse Input Report containing button data. */
 #define INPUT_REP_MOVEMENT_LEN          3                                           /**< Length of Mouse Input Report containing movement data. */
 #define INPUT_REP_MEDIA_PLAYER_LEN      1                                           /**< Length of Mouse Input Report containing media player data. */
@@ -580,6 +580,7 @@ static void gatt_init(void)
 {
     ret_code_t err_code = nrf_ble_gatt_init(&m_gatt, NULL);
     APP_ERROR_CHECK(err_code);
+    NRF_LOG_INFO("GATT init");
 }
 
 
@@ -592,6 +593,7 @@ static void gatt_init(void)
  */
 static void nrf_qwr_error_handler(uint32_t nrf_error)
 {
+    NRF_LOG_INFO("QWM ERROR");
     APP_ERROR_HANDLER(nrf_error);
 }
 
@@ -606,6 +608,7 @@ static void qwr_init(void)
     qwr_init_obj.error_handler = nrf_qwr_error_handler;
 
     err_code = nrf_ble_qwr_init(&m_qwr, &qwr_init_obj);
+    NRF_LOG_INFO("QWM init");
     APP_ERROR_CHECK(err_code);
 }
 
@@ -632,6 +635,7 @@ static void dis_init(void)
 
     err_code = ble_dis_init(&dis_init_obj);
     APP_ERROR_CHECK(err_code);
+    NRF_LOG_INFO("DIS init");
 }
 
 
@@ -751,6 +755,19 @@ static void hids_init(void)
         0x09, 0x06,       // Usage (Keyboard)
         0xA1, 0x01,       // Collection (Application)
         0x85, 0x04,       // Report Id (4)
+
+        0x05, 0x07,       // Usage Page (Key Codes)
+        0x19, 0xe0,       // Usage Minimum (224)
+        0x29, 0xe7,       // Usage Maximum (231)
+        0x15, 0x00,       // Logical Minimum (0)
+        0x25, 0x01,       // Logical Maximum (1)
+        0x75, 0x01,       // Report Size (1)
+        0x95, 0x08,       // Report Count (8)
+        0x81, 0x02,       // Input (Data, Variable, Absolute)
+
+        0x95, 0x01,       // Report Count (1)
+        0x75, 0x08,       // Report Size (8)
+        0x81, 0x01,       // Input (Constant) reserved byte(1)
 
         0x95, 0x06,       // Report Count (6)
         0x75, 0x08,       // Report Size (8)
@@ -971,7 +988,7 @@ static uint32_t send_key_scan_press_release(ble_hids_t * p_hids,
     ret_code_t err_code;
     uint16_t offset;
     uint16_t data_len;
-    uint8_t  data[INPUT_REPORT_COUNT + INPUT_REPORT_KEYS_MAX_LEN];
+    uint8_t  data[INPUT_REPORT_KEYS_MAX_LEN];
 
     // HID Report Descriptor enumerates an array of size 6, the pattern hence shall not be any
     // longer than this.
@@ -996,8 +1013,10 @@ static uint32_t send_key_scan_press_release(ble_hids_t * p_hids,
         }
 
         NRF_LOG_INFO("Sending keyboard now");
+        NRF_LOG_HEXDUMP_INFO(data, sizeof(data));
         if (!m_in_boot_mode)
         {
+            NRF_LOG_INFO("BOOT");
             err_code = ble_hids_inp_rep_send(p_hids,
                                              INPUT_REPORT_KEYS_INDEX,
                                              INPUT_REPORT_KEYS_MAX_LEN,
@@ -1006,6 +1025,7 @@ static uint32_t send_key_scan_press_release(ble_hids_t * p_hids,
         }
         else
         {
+            NRF_LOG_INFO("NOT BOOT");
             err_code = ble_hids_boot_kb_inp_rep_send(p_hids,
                                                      INPUT_REPORT_KEYS_MAX_LEN,
                                                      data,
