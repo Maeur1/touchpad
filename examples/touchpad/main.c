@@ -80,6 +80,7 @@
 #include "ble_advertising.h"
 #include "fds.h"
 #include "ble_conn_state.h"
+#include "nfc_ble_pair_lib.h"
 #include "nrf_ble_gatt.h"
 #include "nrf_ble_qwr.h"
 #include "nrf_pwr_mgmt.h"
@@ -178,6 +179,10 @@
 #define APP_ADV_FAST_DURATION           3000                                        /**< The advertising duration of fast advertising in units of 10 milliseconds. */
 #define APP_ADV_SLOW_DURATION           18000                                       /**< The advertising duration of slow advertising in units of 10 milliseconds. */
 
+#ifndef NFC_PAIRING_MODE
+    #define NFC_PAIRING_MODE NFC_PAIRING_MODE_JUST_WORKS
+#endif
+
 /* TWI instance ID. */
 #if TWI0_ENABLED
 #define TWI_INSTANCE_ID     0
@@ -256,9 +261,11 @@ BLE_ADVERTISING_DEF(m_advertising);                                             
 static bool              m_in_boot_mode = false;                                    /**< Current protocol mode. */
 static uint16_t          m_conn_handle  = BLE_CONN_HANDLE_INVALID;                  /**< Handle of the current connection. */
 static pm_peer_id_t      m_peer_id;                                                 /**< Device reference handle to the current bonded central. */
+static pm_peer_id_t      m_whitelist_peers[BLE_GAP_WHITELIST_ADDR_MAX_COUNT];       /**< List of peers currently in the whitelist. */
+static uint32_t          m_whitelist_peer_cnt;                                      /**< Number of peers currently in the whitelist. */
 static sensorsim_cfg_t   m_battery_sim_cfg;                                         /**< Battery Level sensor simulator configuration. */
 static sensorsim_state_t m_battery_sim_state;                                       /**< Battery Level sensor simulator state. */
-static buffer_list_t     buffer_list;                               /**< List to enqueue not just data to be sent, but also related information like the handle, connection handle etc */
+static buffer_list_t     buffer_list;                                               /**< List to enqueue not just data to be sent, but also related information like the handle, connection handle etc */
 static ble_uuid_t        m_adv_uuids[] =                                            /**< Universally unique service identifiers. */
 {
     {BLE_UUID_HUMAN_INTERFACE_DEVICE_SERVICE, BLE_UUID_TYPE_BLE}
@@ -438,23 +445,53 @@ static void advertising_start(bool erase_bonds)
  */
 static void pm_evt_handler(pm_evt_t const * p_evt)
 {
+    ret_code_t err_code;
+
     pm_handler_on_pm_evt(p_evt);
     pm_handler_flash_clean(p_evt);
 
     switch (p_evt->evt_id)
     {
+        case PM_EVT_CONN_SEC_SUCCEEDED:
+            m_peer_id = p_evt->peer_id;
+            break;
+
         case PM_EVT_PEERS_DELETE_SUCCEEDED:
             advertising_start(false);
             break;
 
+        case PM_EVT_CONN_SEC_PARAMS_REQ:
+            // Send event to the NFC BLE pairing library as it may dynamically alternate
+            // security parameters to achieve highest possible security level.
+            err_code = nfc_ble_pair_on_pm_params_req(p_evt);
+            APP_ERROR_CHECK(err_code);
+            break;
+
         case PM_EVT_PEER_DATA_UPDATE_SUCCEEDED:
+            // Note: You should check on what kind of white list policy your application should use.
             if (     p_evt->params.peer_data_update_succeeded.flash_changed
                  && (p_evt->params.peer_data_update_succeeded.data_id == PM_PEER_DATA_ID_BONDING))
             {
-                NRF_LOG_INFO("New Bond, add the peer to the whitelist if possible");
-                // Note: You should check on what kind of white list policy your application should use.
+                NRF_LOG_DEBUG("New Bond, add the peer to the whitelist if possible");
+                NRF_LOG_DEBUG("\tm_whitelist_peer_cnt %d, MAX_PEERS_WLIST %d",
+                               m_whitelist_peer_cnt + 1,
+                               BLE_GAP_WHITELIST_ADDR_MAX_COUNT);
 
-                whitelist_set(PM_PEER_ID_LIST_SKIP_NO_ID_ADDR);
+                if (m_whitelist_peer_cnt < BLE_GAP_WHITELIST_ADDR_MAX_COUNT)
+                {
+                    // Bonded to a new peer, add it to the whitelist.
+                    m_whitelist_peers[m_whitelist_peer_cnt++] = m_peer_id;
+
+                    // The whitelist has been modified, update it in the Peer Manager.
+                    err_code = pm_device_identities_list_set(m_whitelist_peers, m_whitelist_peer_cnt);
+                    if (err_code != NRF_ERROR_NOT_SUPPORTED)
+                    {
+                        APP_ERROR_CHECK(err_code);
+                    }
+
+                    err_code = pm_whitelist_set(m_whitelist_peers, m_whitelist_peer_cnt);
+                    APP_ERROR_CHECK(err_code);
+                }
             }
             break;
 
@@ -1488,32 +1525,18 @@ static void ble_stack_init(void)
 
 /**@brief Function for the Peer Manager initialization.
  */
-static void peer_manager_init(void)
+static void peer_manager_init(bool erase_bonds)
 {
-    ble_gap_sec_params_t sec_param;
-    ret_code_t           err_code;
+    ret_code_t err_code;
 
     err_code = pm_init();
     APP_ERROR_CHECK(err_code);
 
-    memset(&sec_param, 0, sizeof(ble_gap_sec_params_t));
-
-    // Security parameters to be used for all security procedures.
-    sec_param.bond           = SEC_PARAM_BOND;
-    sec_param.mitm           = SEC_PARAM_MITM;
-    sec_param.lesc           = SEC_PARAM_LESC;
-    sec_param.keypress       = SEC_PARAM_KEYPRESS;
-    sec_param.io_caps        = SEC_PARAM_IO_CAPABILITIES;
-    sec_param.oob            = SEC_PARAM_OOB;
-    sec_param.min_key_size   = SEC_PARAM_MIN_KEY_SIZE;
-    sec_param.max_key_size   = SEC_PARAM_MAX_KEY_SIZE;
-    sec_param.kdist_own.enc  = 1;
-    sec_param.kdist_own.id   = 1;
-    sec_param.kdist_peer.enc = 1;
-    sec_param.kdist_peer.id  = 1;
-
-    err_code = pm_sec_params_set(&sec_param);
-    APP_ERROR_CHECK(err_code);
+    if (erase_bonds)
+    {
+        err_code = pm_peers_delete();
+        APP_ERROR_CHECK(err_code);
+    }
 
     err_code = pm_register(pm_evt_handler);
     APP_ERROR_CHECK(err_code);
@@ -1731,6 +1754,51 @@ static void buttons_leds_init(bool * p_erase_bonds)
     *p_erase_bonds = (startup_event == BSP_EVENT_CLEAR_BONDING_DATA);
 }
 
+/**@brief Fetch the list of peer manager peer IDs.
+ *
+ * @param[inout] p_peers   The buffer where to store the list of peer IDs.
+ * @param[inout] p_size    In: The size of the @p p_peers buffer.
+ *                         Out: The number of peers copied in the buffer.
+ */
+static void peer_list_get(pm_peer_id_t * p_peers, uint32_t * p_size)
+{
+    pm_peer_id_t peer_id;
+    uint32_t     peers_to_copy;
+
+    peers_to_copy = (*p_size < BLE_GAP_WHITELIST_ADDR_MAX_COUNT) ?
+                     *p_size : BLE_GAP_WHITELIST_ADDR_MAX_COUNT;
+
+    peer_id = pm_next_peer_id_get(PM_PEER_ID_INVALID);
+    *p_size = 0;
+
+    while ((peer_id != PM_PEER_ID_INVALID) && (peers_to_copy--))
+    {
+        p_peers[(*p_size)++] = peer_id;
+        peer_id = pm_next_peer_id_get(peer_id);
+    }
+}
+
+static void whitelist_load(void)
+{
+    ret_code_t ret;
+
+    memset(m_whitelist_peers, PM_PEER_ID_INVALID, sizeof(m_whitelist_peers));
+    m_whitelist_peer_cnt = (sizeof(m_whitelist_peers) / sizeof(pm_peer_id_t));
+
+    peer_list_get(m_whitelist_peers, &m_whitelist_peer_cnt);
+
+    // Setup the device identies list.
+    // Some SoftDevices do not support this feature.
+    ret = pm_device_identities_list_set(m_whitelist_peers, m_whitelist_peer_cnt);
+    if (ret != NRF_ERROR_NOT_SUPPORTED)
+    {
+        APP_ERROR_CHECK(ret);
+    }
+
+    ret = pm_whitelist_set(m_whitelist_peers, m_whitelist_peer_cnt);
+    APP_ERROR_CHECK(ret);
+}
+
 
 /**@brief Function for initializing the nrf log module.
  */
@@ -1740,6 +1808,14 @@ static void log_init(void)
     APP_ERROR_CHECK(err_code);
 
     NRF_LOG_DEFAULT_BACKENDS_INIT();
+}
+
+/**@brief Function for initializing NFC BLE pairing module.
+ */
+static void nfc_pairing_init()
+{
+    ret_code_t err_code = nfc_ble_pair_init(&m_advertising, (nfc_pairing_mode_t)NFC_PAIRING_MODE);
+    APP_ERROR_CHECK(err_code);
 }
 
 
@@ -1780,13 +1856,19 @@ int main(void)
     power_management_init();
     ble_stack_init();
     scheduler_init();
+    peer_manager_init(erase_bonds);
+    if (erase_bonds == true)
+    {
+        NRF_LOG_INFO("Bonds erased!");
+    }
     gap_params_init();
     gatt_init();
+    whitelist_load();
     advertising_init();
+    nfc_pairing_init();
     services_init();
     sensor_simulator_init();
     conn_params_init();
-    peer_manager_init();
     twi_init();
     mgc3130_init(&m_twi, mouse_movement_send);
 
