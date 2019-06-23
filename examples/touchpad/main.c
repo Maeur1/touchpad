@@ -83,6 +83,7 @@
 #include "nfc_ble_pair_lib.h"
 #include "nrf_ble_gatt.h"
 #include "nrf_ble_qwr.h"
+#include "nrf_ble_lesc.h"
 #include "nrf_pwr_mgmt.h"
 #include "peer_manager_handler.h"
 #include "mgc3130.h"
@@ -258,6 +259,7 @@ NRF_BLE_GATT_DEF(m_gatt);                                                       
 NRF_BLE_QWR_DEF(m_qwr);                                                             /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);                                                 /**< Advertising module instance. */
 
+static ble_advdata_t m_advdata;                                                     /**< Struct containing advertising data */
 static bool              m_in_boot_mode = false;                                    /**< Current protocol mode. */
 static uint16_t          m_conn_handle  = BLE_CONN_HANDLE_INVALID;                  /**< Handle of the current connection. */
 static pm_peer_id_t      m_peer_id;                                                 /**< Device reference handle to the current bonded central. */
@@ -386,23 +388,6 @@ static void whitelist_set(pm_peer_id_list_skip_t skip)
                    BLE_GAP_WHITELIST_ADDR_MAX_COUNT);
 
     err_code = pm_whitelist_set(peer_ids, peer_id_count);
-    APP_ERROR_CHECK(err_code);
-}
-
-
-/**@brief Function for setting filtered device identities.
- *
- * @param[in] skip  Filter passed to @ref pm_peer_id_list.
- */
-static void identities_set(pm_peer_id_list_skip_t skip)
-{
-    pm_peer_id_t peer_ids[BLE_GAP_DEVICE_IDENTITIES_MAX_COUNT];
-    uint32_t     peer_id_count = BLE_GAP_DEVICE_IDENTITIES_MAX_COUNT;
-
-    ret_code_t err_code = pm_peer_id_list(peer_ids, &peer_id_count, PM_PEER_ID_INVALID, skip);
-    APP_ERROR_CHECK(err_code);
-
-    err_code = pm_device_identities_list_set(peer_ids, peer_id_count);
     APP_ERROR_CHECK(err_code);
 }
 
@@ -1381,15 +1366,14 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
             uint32_t       addr_cnt = BLE_GAP_WHITELIST_ADDR_MAX_COUNT;
             uint32_t       irk_cnt  = BLE_GAP_WHITELIST_ADDR_MAX_COUNT;
 
-            err_code = pm_whitelist_get(whitelist_addrs, &addr_cnt,
-                                        whitelist_irks,  &irk_cnt);
+            err_code = pm_whitelist_get(whitelist_addrs,
+                                        &addr_cnt,
+                                        whitelist_irks,
+                                        &irk_cnt);
             APP_ERROR_CHECK(err_code);
             NRF_LOG_DEBUG("pm_whitelist_get returns %d addr in whitelist and %d irk whitelist",
                            addr_cnt,
                            irk_cnt);
-
-            // Set the correct identities list (no excluding peers with no Central Address Resolution).
-            identities_set(PM_PEER_ID_LIST_SKIP_NO_IRK);
 
             // Apply the whitelist.
             err_code = ble_advertising_whitelist_reply(&m_advertising,
@@ -1398,8 +1382,7 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
                                                        whitelist_irks,
                                                        irk_cnt);
             APP_ERROR_CHECK(err_code);
-        }
-        break;
+        } break;
 
         case BLE_ADV_EVT_PEER_ADDR_REQUEST:
         {
@@ -1408,23 +1391,17 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
             // Only Give peer address if we have a handle to the bonded peer.
             if (m_peer_id != PM_PEER_ID_INVALID)
             {
-
                 err_code = pm_peer_data_bonding_load(m_peer_id, &peer_bonding_data);
                 if (err_code != NRF_ERROR_NOT_FOUND)
                 {
                     APP_ERROR_CHECK(err_code);
 
-                    // Manipulate identities to exclude peers with no Central Address Resolution.
-                    identities_set(PM_PEER_ID_LIST_SKIP_ALL);
-
                     ble_gap_addr_t * p_peer_addr = &(peer_bonding_data.peer_ble_id.id_addr_info);
                     err_code = ble_advertising_peer_addr_reply(&m_advertising, p_peer_addr);
                     APP_ERROR_CHECK(err_code);
                 }
-
             }
-            break;
-        }
+        } break;//BLE_ADV_EVT_PEER_ADDR_REQUEST
 
         default:
             break;
@@ -1455,12 +1432,22 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
             break;
 
         case BLE_GAP_EVT_DISCONNECTED:
+        {
             NRF_LOG_INFO("Disconnected");
-            // LED indication will be changed when advertising starts.
+
+            // Dequeue all keys without transmission.
             (void) buffer_dequeue(false);
 
-            m_conn_handle = BLE_CONN_HANDLE_INVALID;
-            break;
+            m_conn_handle  = BLE_CONN_HANDLE_INVALID;
+
+            // Reset m_caps_on variable. Upon reconnect, the HID host will re-send the Output
+            // report containing the Caps lock state.
+            m_caps_on = false;
+
+            err_code = bsp_indication_set(BSP_INDICATE_IDLE);
+            APP_ERROR_CHECK(err_code);
+            sleep_mode_enter();
+        } break; // BLE_GAP_EVT_DISCONNECTED
 
         case BLE_GAP_EVT_PHY_UPDATE_REQUEST:
         {
@@ -1473,6 +1460,11 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
             err_code = sd_ble_gap_phy_update(p_ble_evt->evt.gap_evt.conn_handle, &phys);
             APP_ERROR_CHECK(err_code);
         } break;
+
+        case BLE_GATTS_EVT_HVN_TX_COMPLETE:
+            // Send next key event
+            (void) buffer_dequeue(true);
+            break;
 
         case BLE_GATTC_EVT_TIMEOUT:
             // Disconnect on GATT Client timeout event.
@@ -1488,6 +1480,13 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
             err_code = sd_ble_gap_disconnect(p_ble_evt->evt.gatts_evt.conn_handle,
                                              BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
             APP_ERROR_CHECK(err_code);
+            break;
+
+        case BLE_GAP_EVT_CONN_SEC_UPDATE:
+            NRF_LOG_INFO("BLE_GAP_EVT_CONN_SEC_UPDATE");
+            NRF_LOG_INFO("Security mode: %u. Security level: %u",
+                         p_ble_evt->evt.gap_evt.params.conn_sec_update.conn_sec.sec_mode.sm,
+                         p_ble_evt->evt.gap_evt.params.conn_sec_update.conn_sec.sec_mode.lv);
             break;
 
         default:
@@ -1573,18 +1572,19 @@ static void sp_advdata_prepare(ble_advdata_t const * const p_new_advdata,
  */
 static void advertising_init(void)
 {
-    ret_code_t             err_code;
-    uint8_t                adv_flags;
+    uint32_t               err_code;
     ble_advertising_init_t init;
 
     memset(&init, 0, sizeof(init));
 
-    adv_flags                            = BLE_GAP_ADV_FLAGS_LE_ONLY_LIMITED_DISC_MODE;
-    init.advdata.name_type               = BLE_ADVDATA_FULL_NAME;
-    init.advdata.include_appearance      = true;
-    init.advdata.flags                   = adv_flags;
-    init.advdata.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
-    init.advdata.uuids_complete.p_uuids  = m_adv_uuids;
+    //Only set up adv_data. Options will be set depending on if advertising will be enabled or not.
+    m_advdata.name_type               = BLE_ADVDATA_FULL_NAME;
+    m_advdata.include_appearance      = true;
+    m_advdata.flags                   = BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE;
+    m_advdata.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
+    m_advdata.uuids_complete.p_uuids  = m_adv_uuids;
+
+    init.advdata = m_advdata;
 
     init.config.ble_adv_whitelist_enabled          = true;
     init.config.ble_adv_directed_high_duty_enabled = true;
@@ -1597,6 +1597,7 @@ static void advertising_init(void)
     init.config.ble_adv_slow_enabled               = true;
     init.config.ble_adv_slow_interval              = APP_ADV_SLOW_INTERVAL;
     init.config.ble_adv_slow_timeout               = APP_ADV_SLOW_DURATION;
+    init.config.ble_adv_on_disconnect_disabled     = true;
 
     init.evt_handler   = on_adv_evt;
     init.error_handler = ble_advertising_error_handler;
@@ -1835,6 +1836,14 @@ static void power_management_init(void)
  */
 static void idle_state_handle(void)
 {
+    ret_code_t err_code;
+
+    err_code = nrf_ble_lesc_request_handler();
+    if (err_code != NRF_ERROR_INVALID_STATE)
+    {
+        APP_ERROR_CHECK(err_code);
+    }
+
     app_sched_execute();
     if (NRF_LOG_PROCESS() == false)
     {
