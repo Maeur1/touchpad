@@ -129,7 +129,7 @@
 #define SEC_PARAM_MIN_KEY_SIZE          7                                           /**< Minimum encryption key size. */
 #define SEC_PARAM_MAX_KEY_SIZE          16                                          /**< Maximum encryption key size. */
 
-#define SWIFT_PAIR_SUPPORTED            0                                           /**< Swift Pair feature is supported. */
+#define SWIFT_PAIR_SUPPORTED            1                                           /**< Swift Pair feature is supported. */
 #if SWIFT_PAIR_SUPPORTED == 1
 #define MICROSOFT_VENDOR_ID             0x0006                                      /**< Microsoft Vendor ID.*/
 #define MICROSOFT_BEACON_ID             0x03                                        /**< Microsoft Beacon ID, used to indicate that Swift Pair feature is supported. */
@@ -1034,11 +1034,8 @@ static uint32_t send_key_scan_press_release(ble_hids_t * p_hids,
             data[MODIFIER_KEY_POS] |= SHIFT_KEY_CODE;
         }
 
-        NRF_LOG_INFO("Sending keyboard now");
-        NRF_LOG_HEXDUMP_INFO(data, sizeof(data));
         if (!m_in_boot_mode)
         {
-            NRF_LOG_INFO("BOOT");
             err_code = ble_hids_inp_rep_send(p_hids,
                                              INPUT_REPORT_KEYS_INDEX,
                                              INPUT_REPORT_KEYS_MAX_LEN,
@@ -1047,7 +1044,6 @@ static uint32_t send_key_scan_press_release(ble_hids_t * p_hids,
         }
         else
         {
-            NRF_LOG_INFO("NOT BOOT");
             err_code = ble_hids_boot_kb_inp_rep_send(p_hids,
                                                      INPUT_REPORT_KEYS_MAX_LEN,
                                                      data,

@@ -7,9 +7,9 @@
 #include "nrf_drv_gpiote.h"
 #include "nrf_log.h"
 
-#define PRINT_RAW_FW_INFO	//	Enable Print on Serial interface of RAW Firmware Info
-#define PRINT_RAW_DATA		//	Enable Print on Serial interface of RAW data
-#define PRINT_GESTURE_DATA	//	Enable Print on Serial interface of Gesture recognized
+// #define PRINT_RAW_FW_INFO	//	Enable Print on Serial interface of RAW Firmware Info
+// #define PRINT_RAW_DATA		//	Enable Print on Serial interface of RAW data
+// #define PRINT_GESTURE_DATA	//	Enable Print on Serial interface of Gesture recognized
 // #define PRINT_XYZ			//	Enable Print on serial interface of xyz coordinates
 
 // #define DEBUG_MGC3130
