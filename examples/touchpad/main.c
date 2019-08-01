@@ -87,6 +87,7 @@
 #include "nrf_pwr_mgmt.h"
 #include "peer_manager_handler.h"
 #include "mgc3130.h"
+#include "usb_hid.h"
 
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
@@ -170,7 +171,6 @@
 
 #define MODIFIER_KEY_POS                    0                                          /**< Position of the modifier byte in the Input Report. */
 #define SCAN_CODE_POS                       3                                          /**< The start position of the key scan code in a HID Report. */
-#define SHIFT_KEY_CODE                      0x02                                       /**< Key code indicating the press of the Shift Key. */
 
 #define MAX_KEYS_IN_ONE_REPORT              (INPUT_REPORT_KEYS_MAX_LEN - SCAN_CODE_POS)/**< Maximum number of key presses that can be sent in one Input Report. */
 
@@ -179,6 +179,8 @@
 
 #define APP_ADV_FAST_DURATION           3000                                        /**< The advertising duration of fast advertising in units of 10 milliseconds. */
 #define APP_ADV_SLOW_DURATION           18000                                       /**< The advertising duration of slow advertising in units of 10 milliseconds. */
+
+#define GESTURE_CONTROL                                                             /** Enable Win + Left Control with every key press */
 
 #ifndef NFC_PAIRING_MODE
     #define NFC_PAIRING_MODE NFC_PAIRING_MODE_JUST_WORKS
@@ -275,12 +277,22 @@ static ble_uuid_t        m_adv_uuids[] =                                        
 
 static uint8_t m_sample_key_press_scan_str[] = /**< Key pattern to be sent when the key press button has been pushed. */
 {
-    0x0b,       /* Key h */
-    0x08,       /* Key e */
-    0x0f,       /* Key l */
-    0x0f,       /* Key l */
-    0x12,       /* Key o */
-    0x28        /* Key Return */
+    KEY_H,       /* Key h */
+    KEY_E,       /* Key e */
+    KEY_L,       /* Key l */
+    KEY_L,       /* Key l */
+    KEY_O,       /* Key o */
+    KEY_ENTER        /* Key Return */
+};
+
+static uint8_t workspace_west[] = // Keys to change to swipe west
+{
+    KEY_LEFT
+};
+
+static uint8_t workspace_east[] = // Keys to change to swipe west
+{
+    KEY_RIGHT
 };
 
 static uint8_t m_caps_on_key_scan_str[] = /**< Key pattern to be sent when the output report has been written with the CAPS LOCK bit set. */
@@ -1031,8 +1043,12 @@ static uint32_t send_key_scan_press_release(ble_hids_t * p_hids,
 
         if (bsp_button_is_pressed(SHIFT_BUTTON_ID))
         {
-            data[MODIFIER_KEY_POS] |= SHIFT_KEY_CODE;
+            data[MODIFIER_KEY_POS] |= KEY_MOD_LSHIFT;
         }
+
+#ifdef GESTURE_CONTROL
+        data[MODIFIER_KEY_POS] |= KEY_MOD_LMETA | KEY_MOD_LCTRL;
+#endif
 
         if (!m_in_boot_mode)
         {
@@ -1210,6 +1226,19 @@ static void keys_send(uint8_t key_pattern_len, uint8_t * p_key_pattern)
        )
     {
         APP_ERROR_HANDLER(err_code);
+    }
+}
+
+static void keyboard_send(uint8_t gestureCode)
+{
+    switch(gestureCode)
+    {
+        case GESTURE_EAST_WEST:
+            keys_send(sizeof(workspace_west), workspace_west);
+        break;
+        case GESTURE_WEST_EAST:
+            keys_send(sizeof(workspace_east), workspace_east);
+        break;
     }
 }
 
@@ -1711,7 +1740,7 @@ static void bsp_event_handler(bsp_event_t event)
         case BSP_EVENT_KEY_0:
             if (m_conn_handle != BLE_CONN_HANDLE_INVALID)
             {
-                keys_send(1, p_key);
+                // keys_send(sizeof(p_key), p_key);
                 p_key++;
                 size++;
                 if (size == MAX_KEYS_IN_ONE_REPORT)
@@ -1875,7 +1904,7 @@ int main(void)
     sensor_simulator_init();
     conn_params_init();
     twi_init();
-    mgc3130_init(&m_twi, mouse_movement_send);
+    mgc3130_init(&m_twi, mouse_movement_send, keyboard_send);
 
     // Start execution.
     NRF_LOG_INFO("HID Mouse example started.");
@@ -1890,8 +1919,3 @@ int main(void)
         idle_state_handle();
     }
 }
-
-
-/**
- * @}
- */

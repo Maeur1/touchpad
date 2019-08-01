@@ -3,7 +3,8 @@
 static const nrf_drv_twi_t* m_twi;
 uint8_t data[MGC3130_FIRST_MESSAGE_SIZE];
 
-void (*callback)(int16_t, int16_t);
+void (*mouse_callback)(int16_t, int16_t);
+void (*keyboard_callback)(uint8_t);
 
 //----------------------------------------
 //   X-Y-Z Position
@@ -35,9 +36,28 @@ void mgc3130_reset(void)
     nrf_delay_ms(MGC3130_RESET_DELAY_MS);
 }
 
-void mgc3130_print_raw_firmware_info(void)
+void mgc3130_print_gestures(void)
 {
-    NRF_LOG_INFO("Whole bunch of firmware stuff which I cannot be bothered formatting");
+    switch(GestureInfo.Bit.GestureCode) {
+        case GESTURE_WEST_EAST:
+            NRF_LOG_INFO("Flick West To East");
+        break;
+        case GESTURE_EAST_WEST:
+            NRF_LOG_INFO("Flick East to West");
+        break;
+        case GESTURE_SOUTH_NORTH:
+            NRF_LOG_INFO("Flick South to North");
+        break;
+        case GESTURE_NORTH_SOUTH:
+            NRF_LOG_INFO("Flick North to South");
+        break;
+        case GESTURE_CLOCK_WISE:
+            NRF_LOG_INFO("Circle Clockwise");
+        break;
+        case GESTURE_COUNTER_CLOCK_WISE:
+            NRF_LOG_INFO("Circle Counter-Clockwise");
+        break;
+    }
 }
 
 void mgc3130_print_xyz(void)
@@ -60,13 +80,24 @@ void mgc3130_print_xyz(void)
 
 void _mgc3130_process_delta(void)
 {
+#ifdef PRINT_XYZ
+    mgc3130_print_xyz();
+#endif
     delta_x = (xyzPosition.xyzWord.x_pos - MIDDLE_VALUE)/1000;
     delta_y = (xyzPosition.xyzWord.y_pos - MIDDLE_VALUE)/1000;
-    callback(delta_x, -delta_y);
+    mouse_callback(0, -0);
 #ifdef DEBUG_MGC3130
     if(xyzPosition.xyzWord.x_pos || xyzPosition.xyzWord.y_pos || xyzPosition.xyzWord.z_pos)
         NRF_LOG_INFO("Delta X: %5d\tY:%5d", delta_x, delta_y);
 #endif
+}
+
+void _mgc3130_process_gesture(void)
+{
+#ifdef PRINT_GESTURE_DATA
+    mgc3130_print_gestures();
+#endif
+    keyboard_callback(GestureInfo.Bit.GestureCode);
 }
 
 void mgc3130_read_data(void)
@@ -86,25 +117,23 @@ void mgc3130_read_data(void)
         NRF_LOG_INFO("Error Code: %d.", err_code);
     }
 
-    char c;
-
     switch (data[3])
 	{
-		case ID_FW_VERSION:		
 #ifdef PRINT_RAW_FW_INFO	
-	mgc3130_print_raw_firmware_info();
+		case ID_FW_VERSION:		
+            if (data[4] == 0xAA) {
+                char c;
+                // Valid Gestic Library available
+                NRF_LOG_RAW_INFO("FW Version: ");
+                for (int i = 0; i < 120; i++) {
+                    c = (char)(data[i + 10]);
+                    NRF_LOG_RAW_INFO(&c);
+                }
+                NRF_LOG_RAW_INFO("\n");
+            }
+            break;
 #endif
-			if (data[4] == 0xAA) {
-				// Valid Gestic Library available
-				NRF_LOG_RAW_INFO("FW Version: ");
-				for (int i = 0; i < 120; i++) {
-					c = (char)(data[i + 10]);
-					NRF_LOG_RAW_INFO(&c);
-				}
-				NRF_LOG_RAW_INFO("\n");
-			}
-			break;
-			
+
 		case ID_DATA_OUTPUT:		
 			// ----------------------------------------
 			// Save Data into internal array
@@ -124,10 +153,8 @@ void mgc3130_read_data(void)
 		default:
 			break;
 	}
-#ifdef PRINT_XYZ
-    mgc3130_print_xyz();
-#endif
     _mgc3130_process_delta();
+    _mgc3130_process_gesture();
 }
 
 void mgc3130_interrupt_handler(nrfx_gpiote_pin_t pin, nrf_gpiote_polarity_t action)
@@ -159,9 +186,10 @@ void mgc3130_interrupt_init(void)
     nrf_drv_gpiote_in_event_enable(MGC3130_TS, true);
 }
 
-void mgc3130_init(const nrf_drv_twi_t* twi, void (*call)(int16_t, int16_t))
+void mgc3130_init(const nrf_drv_twi_t* twi, void (*mcall)(int16_t, int16_t), void (*kcall)(uint8_t))
 {
-    callback = call;
+    mouse_callback = mcall;
+    keyboard_callback = kcall;
     m_twi = twi;
     FIRST_READ = true;
     nrf_gpio_cfg_input(MGC3130_TS, NRF_GPIO_PIN_PULLUP);

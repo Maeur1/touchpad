@@ -9,7 +9,7 @@
 
 // #define PRINT_RAW_FW_INFO	//	Enable Print on Serial interface of RAW Firmware Info
 // #define PRINT_RAW_DATA		//	Enable Print on Serial interface of RAW data
-// #define PRINT_GESTURE_DATA	//	Enable Print on Serial interface of Gesture recognized
+#define PRINT_GESTURE_DATA	//	Enable Print on Serial interface of Gesture recognized
 // #define PRINT_XYZ			//	Enable Print on serial interface of xyz coordinates
 
 // #define DEBUG_MGC3130
@@ -281,7 +281,7 @@ uint16_t Previous_z_pos;
 int32_t delta_x;
 int32_t delta_y;
 
-void mgc3130_init(const nrf_drv_twi_t* twi, void (*call)(int16_t, int16_t));
+void mgc3130_init(const nrf_drv_twi_t* twi, void (*mcall)(int16_t, int16_t), void (*kcall)(uint8_t));
 void mgc3130_reset(void);
 void mgc3130_read_data(void);
 void mgc3130_print_raw_firmware_info(void);
