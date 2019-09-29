@@ -20,7 +20,7 @@ bool drv2605l_begin(const nrf_drv_twi_t* twi) {
 */
 /**************************************************************************/
 bool drv2605l_init() {
-  uint8_t id = drv2605l_readRegister8(DRV2605_REG_STATUS);
+//   uint8_t id = drv2605l_readRegister8(DRV2605_REG_STATUS);
 //   NRF_LOG_INFO("Status 0x%x", id);
 
   drv2605l_writeRegister8(DRV2605_REG_MODE, 0x00); // out of standby
