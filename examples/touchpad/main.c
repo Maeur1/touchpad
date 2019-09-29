@@ -88,6 +88,7 @@
 #include "peer_manager_handler.h"
 #include "mgc3130.h"
 #include "usb_hid.h"
+#include "drv2605l.h"
 
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
@@ -188,9 +189,9 @@
 
 /* TWI instance ID. */
 #if TWI0_ENABLED
-#define TWI_INSTANCE_ID     0
+#define DRV2605L_TWI_INSTANCE_ID     0
 #elif TWI1_ENABLED
-#define TWI_INSTANCE_ID     1
+#define MGC3130_TWI_INSTANCE_ID     1
 #endif
 
  /* Number of possible TWI addresses. */
@@ -247,7 +248,8 @@ typedef struct
 STATIC_ASSERT(sizeof(buffer_list_t) % 4 == 0);
 
  /* TWI instance. */
-static const nrf_drv_twi_t m_twi = NRF_DRV_TWI_INSTANCE(TWI_INSTANCE_ID);
+static const nrf_drv_twi_t mgc3130_twi = NRF_DRV_TWI_INSTANCE(1);
+static const nrf_drv_twi_t drv2605l_twi = NRF_DRV_TWI_INSTANCE(0);
 
 APP_TIMER_DEF(m_battery_timer_id);                                                  /**< Battery timer. */
 BLE_BAS_DEF(m_bas);                                                                 /**< Battery service instance. */
@@ -352,7 +354,7 @@ void twi_init (void)
 {
     ret_code_t err_code;
 
-    const nrf_drv_twi_config_t twi_config = {
+    const nrf_drv_twi_config_t mgc3130_twi_config = {
        .scl                = MGC3130_SCL,
        .sda                = MGC3130_SDA,
        .frequency          = NRF_DRV_TWI_FREQ_400K,
@@ -360,10 +362,22 @@ void twi_init (void)
        .clear_bus_init     = false
     };
 
-    err_code = nrf_drv_twi_init(&m_twi, &twi_config, NULL, NULL);
+    const nrf_drv_twi_config_t drv2605l_twi_config = {
+       .scl                = DRV2605L_SCL,
+       .sda                = DRV2605L_SDA,
+       .frequency          = NRF_DRV_TWI_FREQ_400K,
+       .interrupt_priority = APP_IRQ_PRIORITY_HIGH,
+       .clear_bus_init     = false
+    };
+
+    err_code = nrf_drv_twi_init(&mgc3130_twi, &mgc3130_twi_config, NULL, NULL);
     APP_ERROR_CHECK(err_code);
 
-    nrf_drv_twi_enable(&m_twi);
+    err_code = nrf_drv_twi_init(&drv2605l_twi, &drv2605l_twi_config, NULL, NULL);
+    APP_ERROR_CHECK(err_code);
+
+    nrf_drv_twi_enable(&mgc3130_twi);
+    nrf_drv_twi_enable(&drv2605l_twi);
 }
 
 /**@brief Callback function for asserts in the SoftDevice.
@@ -1904,7 +1918,8 @@ int main(void)
     sensor_simulator_init();
     conn_params_init();
     twi_init();
-    mgc3130_init(&m_twi, mouse_movement_send, keyboard_send);
+    mgc3130_init(&mgc3130_twi, mouse_movement_send, keyboard_send);
+    drv2605l_begin(&drv2605l_twi);
 
     // Start execution.
     NRF_LOG_INFO("HID Mouse example started.");

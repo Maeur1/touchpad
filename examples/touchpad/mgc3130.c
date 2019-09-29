@@ -1,6 +1,6 @@
 #include "mgc3130.h"
 
-static const nrf_drv_twi_t* m_twi;
+static const nrf_drv_twi_t* mgc3130_twi;
 uint8_t data[MGC3130_FIRST_MESSAGE_SIZE];
 
 void (*mouse_callback)(int16_t, int16_t);
@@ -106,11 +106,11 @@ void mgc3130_read_data(void)
     if(FIRST_READ)
     {
         FIRST_READ = false;
-        err_code = nrf_drv_twi_rx(m_twi, MGC3130_ADDRESS, data, MGC3130_FIRST_MESSAGE_SIZE);
+        err_code = nrf_drv_twi_rx(mgc3130_twi, MGC3130_ADDRESS, data, MGC3130_FIRST_MESSAGE_SIZE);
     } 
     else
     {
-        err_code = nrf_drv_twi_rx(m_twi, MGC3130_ADDRESS, data, MGC3130_MESSAGE_SIZE);
+        err_code = nrf_drv_twi_rx(mgc3130_twi, MGC3130_ADDRESS, data, MGC3130_MESSAGE_SIZE);
     }    
     if(err_code != NRF_SUCCESS)
     {
@@ -190,7 +190,7 @@ void mgc3130_init(const nrf_drv_twi_t* twi, void (*mcall)(int16_t, int16_t), voi
 {
     mouse_callback = mcall;
     keyboard_callback = kcall;
-    m_twi = twi;
+    mgc3130_twi = twi;
     FIRST_READ = true;
     nrf_gpio_cfg_input(MGC3130_TS, NRF_GPIO_PIN_PULLUP);
     nrf_gpio_cfg_output(MGC3130_MCLR);
