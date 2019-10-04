@@ -1248,11 +1248,13 @@ static void keyboard_send(uint8_t gestureCode)
     switch(gestureCode)
     {
         case GESTURE_EAST_WEST:
+            drv2605l_go();
             keys_send(sizeof(workspace_west), workspace_west);
-        break;
+            break;
         case GESTURE_WEST_EAST:
+            drv2605l_go();
             keys_send(sizeof(workspace_east), workspace_east);
-        break;
+            break;
     }
 }
 
@@ -1920,6 +1922,10 @@ int main(void)
     twi_init();
     mgc3130_init(&mgc3130_twi, mouse_movement_send, keyboard_send);
     drv2605l_begin(&drv2605l_twi);
+    drv2605l_setMode(6);
+    drv2605l_setWaveform(0, 85);
+    drv2605l_setWaveform(1, 85);
+    drv2605l_setWaveform(2, 85);
 
     // Start execution.
     NRF_LOG_INFO("HID Mouse example started.");
