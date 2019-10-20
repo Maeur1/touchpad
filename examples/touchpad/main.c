@@ -297,6 +297,11 @@ static uint8_t workspace_east[] = // Keys to change to swipe west
     KEY_RIGHT
 };
 
+static uint8_t clear_key[] = // Keys to change to swipe west
+{
+    KEY_NONE 
+};
+
 static uint8_t m_caps_on_key_scan_str[] = /**< Key pattern to be sent when the output report has been written with the CAPS LOCK bit set. */
 {
     0x06,       /* Key C */
@@ -1061,7 +1066,8 @@ static uint32_t send_key_scan_press_release(ble_hids_t * p_hids,
         }
 
 #ifdef GESTURE_CONTROL
-        data[MODIFIER_KEY_POS] |= KEY_MOD_LMETA | KEY_MOD_LCTRL;
+        if(*p_key_pattern != KEY_NONE)
+            data[MODIFIER_KEY_POS] |= KEY_MOD_LMETA | KEY_MOD_LCTRL;
 #endif
 
         if (!m_in_boot_mode)
@@ -1250,10 +1256,12 @@ static void keyboard_send(uint8_t gestureCode)
         case GESTURE_EAST_WEST:
             drv2605l_go();
             keys_send(sizeof(workspace_west), workspace_west);
+            keys_send(sizeof(clear_key), clear_key);
             break;
         case GESTURE_WEST_EAST:
             drv2605l_go();
             keys_send(sizeof(workspace_east), workspace_east);
+            keys_send(sizeof(clear_key), clear_key);
             break;
     }
 }
